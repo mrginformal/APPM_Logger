@@ -60,12 +60,12 @@ McpRegisters = {
 # This dic contains the names, hex address and size of registers on the mcp39f511, most are included.
 # The format is {'name' : (Address, Signed or not, size in bytes )}
 
-# OUTPUT REGISTERS
+# OUTPUT REGISTERS 
     'sysstatus'     : ('0x0002', False, 2, twobytereginterpreter),
     'sysversion'    : ('0x0004', False, 2, rawinterpreter),
     'volts'         : ('0x0006', False, 2, voltsrmsinterpreter),
     'linefreq'      : ('0x0008', False, 2, linefreqinterpreter),
-    'thermistor'    : ('0x000a', False, 2, thermistorvinterpreter),
+    'temp'          : ('0x000a', False, 2, thermistorvinterpreter),
     'pf'            : ('0x000c', True, 2, pfinterpreter),
     'amps'          : ('0x000e', False, 4, ampsrmsinterpreter),
     'power'         : ('0x0012', False, 4, powerinterpreter),
