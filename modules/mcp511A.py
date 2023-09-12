@@ -48,8 +48,8 @@ def twobytereginterpreter(value):
     return result
 
 def thermistorvinterpreter(value):
-    temp = (value*.32226) -52
-    # return f'Raw: {value}, Temp: {round(temp, 1)} C'
+    temp = round((value - 154) / 3.09, 1)
+    # return f'Raw: {value}, Temp: {temp} C'
     return temp
 
 def rawinterpreter(value):
@@ -67,12 +67,12 @@ McpRegisters = {
     'linefreq'      : ('0x0008', False, 2, linefreqinterpreter),
     'temp'          : ('0x000a', False, 2, thermistorvinterpreter),
     'pf'            : ('0x000c', True, 2, pfinterpreter),
-    'amps'          : ('0x000e', False, 4, ampsrmsinterpreter),
+    'amps'          : ('0x000e', False, 4, rawinterpreter),
     'power'         : ('0x0012', False, 4, powerinterpreter),
     'rctpower'      : ('0x0016', False, 4, powerinterpreter),
     'ienergy'       : ('0x001e', False, 8, accactenergyinterpreter),
     'eenergy'       : ('0x0026', False, 8, accactenergyinterpreter),
-    'irctenergy'     : ('0x002e', False, 8, accactenergyinterpreter),
+    'irctenergy'    : ('0x002e', False, 8, accactenergyinterpreter),
     'erctenergy'    : ('0x0036', False, 8, accactenergyinterpreter),
     'min1'          : ('0x003e', False, 4, rawinterpreter),
     'min2'          : ('0x0042', False, 4, rawinterpreter),
