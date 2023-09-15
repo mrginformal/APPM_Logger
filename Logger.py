@@ -144,7 +144,7 @@ class APP(ctk.CTk):
         self.config(background='black')
         self.geometry(f'{scrn_w}x{scrn_h}+50+25')
 
-        self.grid_rowconfigure(0, weight=0, minsize=525)
+        self.grid_rowconfigure(0, weight=0, minsize=550)
         self.grid_rowconfigure(1, weight=3)
         self.grid_columnconfigure(0, weight=1)
         self.grid_columnconfigure(1, weight=6)
@@ -543,7 +543,7 @@ class APP(ctk.CTk):
         self.all_checkboxes = []
 
         for i, label in enumerate(self.measurment_parameters):
-            check_box = ctk.CTkCheckBox(self.selection_frame, text=None, corner_radius=10, command=lambda i=i: self.all_parameter_select(i), hover_color='grey50', checkbox_width=50, border_color='black', fg_color='black', border_width=2)
+            check_box = ctk.CTkCheckBox(self.selection_frame, text=None, border_width=3, corner_radius=10, command=lambda i=i: self.all_parameter_select(i), hover_color='grey50', checkbox_width=50, border_color='black', fg_color='black')
             check_box.grid(row=i+1, column=1, padx=5, pady=3, sticky='nse')
             self.all_checkboxes.append(check_box)
 
@@ -552,7 +552,7 @@ class APP(ctk.CTk):
 
         for col, m in enumerate(comports):
             ctk.CTkLabel(self.selection_frame, corner_radius=5, text=m.serial_number[4:], fg_color='grey18', text_color='yellow2', font=self.font1, anchor='w').grid(row=0, column=col+2, padx=5, pady=5, sticky='nsew')
-            self.parameter_selections[m.serial_number] = {key: ctk.CTkCheckBox(self.selection_frame, text=None, corner_radius=10, checkbox_width=50, hover_color='grey50', border_color='black', fg_color='black', border_width=2) for key in self.measurment_parameters}
+            self.parameter_selections[m.serial_number] = {key: ctk.CTkCheckBox(self.selection_frame, text=None, corner_radius=10, checkbox_width=50, hover_color='grey50', border_color='black', fg_color='black', border_width=3) for key in self.measurment_parameters}
             for row, (_, button) in enumerate(self.parameter_selections[m.serial_number].items()):
                 button.grid(row=row+1, column=col+2, padx=5, pady=3, sticky='nse')
 
@@ -615,8 +615,8 @@ class APP(ctk.CTk):
                             line.set_visible(True)
                             y_data = self.graph_table[self.graph_table['M_ID'] == meter][self.string_map[param]].tolist()
                             line.set_data(x_data, y_data)
-
-                            line.set_label(f'{param}:{meter} :: {round(y_data[-1],2)}')
+                            last_datapoint = round(y_data[-1],2)
+                            line.set_label(f'{param}:{meter} \n{last_datapoint}')
                             # This section sets the x and y limits for viewing the graph based on only visible/selected parameters
                             if y_min:
                                 if min(y_data) < y_min:
@@ -637,7 +637,7 @@ class APP(ctk.CTk):
                     self.ax1.set_ylim((y_min * 0.95) - 1, (y_max * 1.05) + 1)
 
 
-                self.ax1.legend(loc='upper left', bbox_to_anchor=(1, .5), labelcolor='linecolor')
+                self.ax1.legend(loc='upper left', bbox_to_anchor=(1, .5 + .025*(len(self.ax1.get_lines()))), labelcolor='linecolor') # puts the legend to the side, and ajusts the verticle based on number of lines
 
                 self.canvas1.draw_idle()
 
