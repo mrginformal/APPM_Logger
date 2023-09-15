@@ -7,6 +7,7 @@ import customtkinter as ctk
 import matplotlib.pyplot as plt
 import matplotlib.style as mplstyle 
 import sys
+import math
 import time
 import multiprocessing as mp
 import threading as th
@@ -14,8 +15,7 @@ from pathlib import Path
 from datetime import datetime
 
 
-from matplotlib.backends.backend_tkagg import (
-    FigureCanvasTkAgg, NavigationToolbar2Tk)
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 
 sys.path.append('modules')
 from APPMControl import send_cmd, build_cmd
@@ -34,12 +34,12 @@ class Meter:             # holds basic info for each meter
 ########## Meter Class || runs in seperate process, job is to actually do all of the data polling from the meters, and package it up
 class Meter_polling:        
 
-    def __init__(self, Meters=None, frequency=30, up_freq=1, pipe=None):
+    def __init__(self, Meters=None, frequency=30, sample_count=1, pipe=None):
         self.meters = Meters
         self.freq = frequency
-        self.up_freq = up_freq
         self.on = True
         self.name = 'meter_polling'
+        self.sample_count = sample_count
         self.pipe = pipe
         self.meter_initial_offcal0_values = None
         self.calibration_temp = 23      #Celcius
@@ -49,8 +49,7 @@ class Meter_polling:
     def run(self):
         start = time.time() + 1
         interval = 1 / self.freq
-        # this will produce no whole numbers, 10hz polling, 3hz update, 3.33 per update, 4 would actually happen before packet was sent off, meaning you actually have refresh of 2.5hz, not 3 but good enough
-        counts_per_sample = self.freq / self.up_freq     
+        # this will produce no whole numbers, 10hz polling, 3hz update, 3.33 per update, 4 would actually happen before packet was sent off, meaning you actually have scan of 2.5hz, not 3 but good enough
         count = 0
         meters = self.meters
         ports = self.ports
@@ -78,7 +77,6 @@ class Meter_polling:
         self.meter_initial_offcal0_values = send_cmd([build_cmd('read offcal0')] * len(self.meters), self.ports)
 
         hex_cmds = [m.cmd for m in meters]
-        
         while self.on:
             # a dict that contains the data for each meter(each meters name is the key), then data is the value(another dic with values for each param)
             data = []					        
@@ -95,7 +93,7 @@ class Meter_polling:
 
                 data.append(measurment)
                 count += 1
-                if not count % (counts_per_sample):
+                if not count % (self.sample_count):
                     ### perform temperature correction each sample
                     temps = send_cmd(get_temps_cmd*len(meters), ports)
                     update_cmds = []
@@ -226,13 +224,14 @@ class APP(ctk.CTk):
         self.ax1.spines[['top', 'bottom', 'left', 'right']].set_linewidth(4)
         self.ax1.xaxis.label.set_color('.5')
         self.ax1.yaxis.label.set_color('.5')
+        self.ax1.grid(False)
 
         self.ax1.tick_params(axis='both', width=3, colors='.5', which='both', size=10)
 
         self.canvas1 = FigureCanvasTkAgg(self.fig1, self.graph_frame)
         self.canvas1.get_tk_widget().grid(row=0, column=0, padx=0, pady=0, sticky='nsew')
         self.canvas1.draw()
-
+        
 
         ############## Options Frame
         self.options_frame = ctk.CTkFrame(self, corner_radius=5, bg_color='black', fg_color='grey18')
@@ -241,8 +240,8 @@ class APP(ctk.CTk):
         self.options_frame.rowconfigure((0,1,2,3,4,5,6,7), weight=1)
     
 
-        self.refresh_button = ctk.CTkButton(self.options_frame, corner_radius=5, text='Refresh', fg_color='yellow2',text_color_disabled='black', text_color='grey18', font=self.font1, command=self.scan_meters, hover_color='grey50')
-        self.refresh_button.grid(row=0, column=0, columnspan=3, padx=5, pady=5, sticky='nsew')
+        self.scan_button = ctk.CTkButton(self.options_frame, corner_radius=5, text='Scan Meters', fg_color='yellow2',text_color_disabled='black', text_color='grey18', font=self.font1, command=self.scan_meters, hover_color='grey50')
+        self.scan_button.grid(row=0, column=0, columnspan=3, padx=5, pady=5, sticky='nsew')
 
         self.start_button = ctk.CTkButton(self.options_frame, corner_radius=5, text='Start', fg_color='yellow2', text_color='grey18', font=self.font1, command=self.log_data, hover_color='grey50')
         self.start_button.grid(row=1, column=0, columnspan=3, padx=5, pady=5, sticky='nsew')
@@ -307,9 +306,9 @@ class APP(ctk.CTk):
             self.pause_button.configure(text='Pause')
             self.pipe_conn2.send('Toggle')
             self.duration_paused += (time.time() - self.paused_time)
-            self.end_time = self.start_time + float(self.duration) + self.duration_paused
-            print(f'end time 1: {self.end_time}')
+
             if self.duration:
+                self.end_time = self.start_time + float(self.duration) + self.duration_paused
                 self.formatted_end_time.set(datetime.fromtimestamp(self.end_time).replace(microsecond=0))
             self.update_time_remaining()
         else:
@@ -320,18 +319,18 @@ class APP(ctk.CTk):
 
     def update_time_remaining(self):
         if not self.pause_button_state:
-            print(self.end_time)
-            time_remaining = self.end_time - time.time()
 
-            total_minutes, seconds = divmod(round(time_remaining), 60)
-            hours, minutes = divmod(total_minutes, 60)
-            self.remaining_time.set(f"{hours:02}:{minutes:02}:{seconds:02}")
+            if hasattr(self, 'end_time'):
+                time_remaining = self.end_time - time.time()
+                total_minutes, seconds = divmod(round(time_remaining), 60)
+                hours, minutes = divmod(total_minutes, 60)
+                self.remaining_time.set(f"{hours:02}:{minutes:02}:{seconds:02}")
         
-            if time_remaining > 0:
-                # Call the update function again after 1000ms (1 second)
-                self.after(1000, self.update_time_remaining)
-            else:
-                self.remaining_time.set("00:00")
+                if time_remaining > 0:
+                    # Call the update function again after 1000ms (1 second)
+                    self.after(1000, self.update_time_remaining)
+                else:
+                    self.remaining_time.set("00:00")
 
     def generate_cmd_string(self, meter):       # meter in this case comes from parameter_selection dictionaries, it is a dictrionary with paramter,button key,value pairs
         cmd_str = ''
@@ -354,12 +353,12 @@ class APP(ctk.CTk):
         self.data_table = None                  # when ever a save to csv is done, it clears that data to ensure the memory doesn't fill up, this is an append based system
 
     def get_filename(self):
-        filename = tk.filedialog.asksaveasfilename(title='Save output data as: ', filetypes = [('CSV files', '*csv')])
-        self.filename = Path(filename + '.csv')
+        filename = tk.filedialog.asksaveasfilename(defaultextension='.csv', title='Save output data as: ', filetypes = [('CSV files', '*csv')])
+        self.filename = Path(filename)
         if self.filename.exists():
             self.filename.unlink()      # deletes any previous file with this name, they are asked if they want to overwrite by the tkinter save as window
 
-        self.text_filename.set(filename[-35:] + '.csv')
+        self.text_filename.set(filename[-35:])
         self.is_valid_filename = True
 
     def log_data(self):
@@ -370,11 +369,12 @@ class APP(ctk.CTk):
                 
                 for meter, item in self.parameter_selections.items():
                     text_cmd, temp_correction_enabled = self.generate_cmd_string(item)
-                    hex_cmd = build_cmd(text_cmd)
-                    for p in self.comports:
-                        if p.serial_number == meter:
-                            port = p
-                    self.meters.append(Meter(hexstring=hex_cmd, portobj=port, temp_correction=temp_correction_enabled))
+                    if text_cmd:
+                        hex_cmd = build_cmd(text_cmd)
+                        for p in self.comports:
+                            if p.serial_number == meter:
+                                port = p
+                        self.meters.append(Meter(hexstring=hex_cmd, portobj=port, temp_correction=temp_correction_enabled))
 
                 if not self.meters:
                     raise ValueError('No meters or commands detected')
@@ -382,38 +382,53 @@ class APP(ctk.CTk):
                 if not self.is_valid_filename:
                     raise ValueError('No valid Filename selected')
                 
-                # this effectively sets the update frequency to always have 500 or so updates before the graph has fully moved across the screen based on the selection of the amount of data to display
-                update_frequency = 300 / self.graph_time_options[self.graph_time_selection.get()]      
-                
-                if update_frequency < 1:        # forces the frequency to be dynamic but only with in a certain range, otherwise it overwrites it
-                    update_frequency = 1
-                if update_frequency > 5:        # max fresh is set to 5hz as the moment
-                    update_frequency = 5
+                # this effectively sets the update frequency to always have approximately 200 updates before the graph has fully moved across the screen based on graph time span
+                freq = self.measurment_freq.get()
+                updates_per_window = 300
+                sample_count = math.ceil((self.graph_time_options[self.graph_time_selection.get()] / updates_per_window) * freq) # the number cannot be below 1, so it gets rounded up
 
                 # Disable input buttons so they can't mess with anything, and color them so its clear they are disabled.
                 self.duration_textbox.configure(state='disabled')
                 self.freq_slider.configure(state='disabled')
                 self.graph_time_menu.configure(state='disabled')
-                self.refresh_button.configure(state='disabled', fg_color='grey50')
+                self.scan_button.configure(state='disabled', fg_color='grey50')
                 self.normalize_button.configure(state='normal', fg_color='yellow2')
                 self.save_as_button.configure(state='disabled', fg_color='grey50')
+
+                # clear parameter seletions so they can be used for data visualization selection, and disable all selections
+                for button in self.all_checkboxes:
+                    button.deselect()
+                    button.configure(state='disable', border_color='grey18')
+                
+                for meter in self.parameter_selections.values():
+                    for button in meter.values():       
+                        if not button.get():
+                            button.deselect()
+                            button.configure(state='disabled', border_color='grey18')
+                            
+                        else:
+                            button.configure(state='normal', fg_color='black')  # all of the buttons that are suposed to be enabled, we make sure they are, becuase the select all function can change them
+                            button.select()
 
                 ########### MultiThreading and Multiprocessing initialization
                 conn1, conn2 = mp.Pipe(duplex=True)
                 self.pipe_conn2 = conn2
                 self.lock = th.Lock()
                 self.stop_flag = th.Event()
+                self.data_updated_flag = th.Event()
                 self.data_table = None
                 self.graph_table = None
 
 
-                M_polling = Meter_polling(Meters=self.meters, frequency=self.measurment_freq.get(), up_freq=update_frequency, pipe=conn1)
+                M_polling = Meter_polling(Meters=self.meters, frequency=freq, sample_count=sample_count, pipe=conn1)
 
                 data_thread = th.Thread(target=self.collect_data, daemon=True)
-                data_thread.start()
-
                 meter_process = mp.Process(target=M_polling.run, daemon=True)
-                meter_process.start() 
+                plotting_thread = th.Thread(target=self.plot_data, daemon=True)
+
+                data_thread.start()
+                meter_process.start()
+                plotting_thread.start()
 
                 self.start_button_state = False
                 self.start_button.configure(text='Stop')
@@ -426,8 +441,6 @@ class APP(ctk.CTk):
                 textbox = ctk.CTkTextbox(message_box, corner_radius=5, text_color='black', bg_color='grey50', fg_color='grey50', wrap='word')
                 textbox.insert("0.0", err)
                 textbox.grid(row=0, column=0, padx=10, pady=10, sticky='nsew')
-
-            # self.update_graph()
 
         else:
             self.pipe_conn2.send('STOP')
@@ -473,40 +486,35 @@ class APP(ctk.CTk):
         graph_table_length = self.measurment_freq.get() * self.graph_time_options[self.graph_time_selection.get()] * len(self.meters)
 
         while True:
+            data = [pd.DataFrame(m) for m in pipe.recv()]
+            with self.lock:                 # aquire a lock before updating main data set
+                self.data_table = pd.concat([self.data_table] + data, copy=False, ignore_index=True)
+                self.graph_table = pd.concat([self.graph_table] + data, copy=False, ignore_index=True).sort_values('timestamp').tail(graph_table_length)
             
-            if pipe.poll():
-                data = pd.DataFrame(pipe.recv()[0])
+            self.data_updated_flag.set()
 
-                with self.lock:                 # aquire a lock before updating main data set
-                    self.data_table = pd.concat([data, self.data_table], copy=False, ignore_index=True)
-                    self.graph_table = pd.concat([data, self.graph_table], copy=False, ignore_index=True).tail(graph_table_length)
+            if time.time() - timer > 120:   # approximately every 120 seconds, save
+                timer = time.time()
+                if self.filename.is_file():
+                    self.save(header=False)
+                else:
+                    self.save()
 
-                if time.time() - timer > 120:   # approximately every 120 seconds, save
-                    timer = time.time()
+            if self.stop_flag.is_set():
+                break
+
+            if self.duration != 0:
+                if time.time() > self.end_time:
+                    self.pipe_conn2.send('STOP')
+
                     if self.filename.is_file():
                         self.save(header=False)
                     else:
                         self.save()
-
-                if self.stop_flag.is_set():
+                    
+                    self.complete_message()
                     break
-
-                if self.duration != 0:
-                    if time.time() > self.end_time:
-                        self.pipe_conn2.send('STOP')
-
-                        if self.filename.is_file():
-                            self.save(header=False)
-                        else:
-                            self.save()
-                        
-                        self.complete_message()
-                        break
-
-            else:
-                time.sleep(0.2)
-
-                
+  
     def scan_meters(self):
 
         ports = serial.tools.list_ports.comports()
@@ -565,31 +573,73 @@ class APP(ctk.CTk):
                         button.configure(state='normal')
 
 
-    def update_graph(self):
+    def plot_data(self):
+        self.lines = {}
+        active_buttons = {}     # a subset of all buttons, only contains active buttons for simplicity later
+        for meter, params in self.parameter_selections.items():
+            self.lines[meter] = {}
+            for param, button in params.items():
+                if button.cget('state') == 'normal':
+                    if meter in active_buttons:
+                        active_buttons[meter][param] = button
+                    else:
+                        active_buttons[meter] = {param: button}
 
-        for i in range(1000):
-            delay =  (i + 1) * 150
-            self.after(delay, lambda i=i: self.plot_data((i+1)*2))
-        
+                    line, = self.ax1.plot([],[])
+                    self.lines[meter][param] = line
+
+        while True:
+            timer = time.time()
+            if self.stop_flag.is_set():
+                break
             
-    def plot_data(self, i):
-        x_values = np.arange(0,200,.05)
-        if i > 1000:
-            current_x_values = x_values[i-1000:i]
-        else:
-            current_x_values = x_values[:i]
-        current_y_values1 = np.sin(current_x_values)
-        current_y_values2 = np.cos(current_x_values)
-        current_y_values3 = 2 * np.sin(current_x_values * 2)
+            self.data_updated_flag.wait()
+            self.data_updated_flag.clear()
+            self.update_graph(active_buttons)
 
-        self.ax1.clear()
-        line1 = self.ax1.plot(current_x_values,current_y_values1, label=f'{round(current_y_values1[-1], 2)}  :   Cumulative Exported Reactive Energy')
-        line2 = self.ax1.plot(current_x_values,current_y_values2, label=f'{round(current_y_values2[-1], 2)}   :   Volts')
-        line3 = self.ax1.plot(current_x_values,current_y_values3, label=f'{round(current_y_values3[-1], 2)}   :   Ampls')
+    def update_graph(self, active_buttons):
+        with self.lock:
+            if not self.graph_table.empty:
+                x_data = None
+                y_min = None
+                y_max = None
+                for meter, params in active_buttons.items():
+                    if not x_data:              # this gets the timestamp data for 1 meter, but since its the same for all meters, there is no need to repeat it for each meter
+                        x_data = self.graph_table[self.graph_table['M_ID'] == meter]['timestamp'].tolist()
+                        x_min = x_data[0]
+                        x_max = x_data[-1]
 
-        legend = self.ax1.legend(loc='upper left', bbox_to_anchor=(1, .5), labelcolor='linecolor')
-        self.canvas1.draw()
+                    for param, button in params.items():
+                        line = self.lines[meter][param]
+                        if button.get():
+                            line.set_visible(True)
+                            y_data = self.graph_table[self.graph_table['M_ID'] == meter][self.string_map[param]].tolist()
+                            line.set_data(x_data, y_data)
 
+                            line.set_label(f'{param}:{meter} :: {round(y_data[-1],2)}')
+                            # This section sets the x and y limits for viewing the graph based on only visible/selected parameters
+                            if y_min:
+                                if min(y_data) < y_min:
+                                    y_min = min(y_data)
+                            else:
+                                y_min = min(y_data)
+
+                            if y_max:
+                                if max(y_data) > y_max:
+                                    y_max = max(y_data)
+                            else: 
+                                y_max = max(y_data)
+                        else:
+                            line.set_visible(False)  
+
+                if y_max and y_min:
+                    self.ax1.set_xlim(x_min, x_max) 
+                    self.ax1.set_ylim((y_min * 0.95) - 1, (y_max * 1.05) + 1)
+
+
+                self.ax1.legend(loc='upper left', bbox_to_anchor=(1, .5), labelcolor='linecolor')
+
+                self.canvas1.draw_idle()
 
     def normalize_data(self):
         pass

@@ -67,7 +67,7 @@ McpRegisters = {
     'linefreq'      : ('0x0008', False, 2, linefreqinterpreter),
     'temp'          : ('0x000a', False, 2, thermistorvinterpreter),
     'pf'            : ('0x000c', True, 2, pfinterpreter),
-    'amps'          : ('0x000e', False, 4, rawinterpreter),
+    'amps'          : ('0x000e', False, 4, ampsrmsinterpreter),
     'power'         : ('0x0012', False, 4, powerinterpreter),
     'rctpower'      : ('0x0016', False, 4, powerinterpreter),
     'ienergy'       : ('0x001e', False, 8, accactenergyinterpreter),

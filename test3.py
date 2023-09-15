@@ -7,7 +7,7 @@ def update_timer():
     remaining_time = ten_minutes - elapsed_time
 
     # Convert the remaining time to minutes and seconds
-    minutes, seconds = divmod(remaining_time.second, 60)
+    minutes, seconds = divmod(remaining_time.seconds, 60)
     
     # Update the label with the new time
     timer_label.config(text=f"{minutes:02}:{seconds:02}")
