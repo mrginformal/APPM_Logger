@@ -3,4 +3,8 @@ pandas
 pyserial
 pathvalidate
 pathlib
+tkinter
+customtkinter
+matplotlib
+
 

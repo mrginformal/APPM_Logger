@@ -13,11 +13,8 @@ import multiprocessing as mp
 import threading as th
 from pathlib import Path
 from datetime import datetime
-
-
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 
-sys.path.append('modules')
 from APPMControl import send_cmd, build_cmd
 
 ctk.set_appearance_mode('Dark')
@@ -655,5 +652,6 @@ class APP(ctk.CTk):
 
         
 if __name__ == '__main__':
+    mp.freeze_support()
     app = APP()
     app.mainloop()
