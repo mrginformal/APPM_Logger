@@ -48,6 +48,7 @@ class Meter_polling:
 
     def run(self):
         start = time.time() + 1
+        adjusted_start = start
         interval = 1 / self.freq
         # this will produce no whole numbers, 10hz polling, 3hz update, 3.33 per update, 4 would actually happen before packet was sent off, meaning you actually have scan of 2.5hz, not 3 but good enough
         count = 0
@@ -82,7 +83,7 @@ class Meter_polling:
             data = []					        
 
             while True:
-                while (time.time() - start) < (interval * count):
+                while (time.time() - adjusted_start) < (interval * count):
                     pass
 
                 measurment = send_cmd(hex_cmds, ports)
@@ -115,16 +116,17 @@ class Meter_polling:
             # check if there is a packet in the pipe, if it does, it removes it vai recieve, and then using pipe.poll(None) to block indefinetly until another packet comes
             # this effective makes a toggle, where the first packet puases, and the second resumes, if either packet = 'stop' then it closes the thread
             if self.pipe.poll():                
-                packet = self.pipe.recv()      
+                packet = self.pipe.recv() 
                 if packet == 'STOP':
                     self.on = False
                     break
-                self.pipe.poll(None)
 
                 packet2 = self.pipe.recv()
                 if packet2 == 'STOP':
                     self.on = False
                     break
+                else:
+                    adjusted_start = start + packet2           #on resume, with will always be packet2, it will send the duration puased, so that the meters loop does not think its behind schedule
 
         print('closeing ports')
         for p in ports:
@@ -144,7 +146,7 @@ class APP(ctk.CTk):
         self.config(background='black')
         self.geometry(f'{scrn_w}x{scrn_h}+50+25')
 
-        self.grid_rowconfigure(0, weight=0, minsize=550)
+        self.grid_rowconfigure(0, weight=0, minsize=scrn_h * .52)
         self.grid_rowconfigure(1, weight=3)
         self.grid_columnconfigure(0, weight=1)
         self.grid_columnconfigure(1, weight=6)
@@ -194,7 +196,7 @@ class APP(ctk.CTk):
         
         ############## selections frame
         self.selection_frame = ctk.CTkScrollableFrame(self, corner_radius=5, bg_color='black', fg_color='grey18', orientation='horizontal')
-        self.selection_frame.grid(row=0, column=1, padx=5, pady=5, sticky='nsew')
+        self.selection_frame.grid(row=0, column=1, padx=5, pady=(5,0), sticky='nsew')
 
         self.meter_label = ctk.CTkLabel(self.selection_frame, corner_radius=5, text='Meter', fg_color='grey18', text_color='yellow2', font=self.font1, anchor='e')
         self.meter_label.grid(row=0, column=0, padx=5, pady=3, sticky='nsew')
@@ -209,7 +211,7 @@ class APP(ctk.CTk):
 
         ############## Graph Frame
         self.graph_frame = ctk.CTkFrame(self, corner_radius=0, bg_color='black', fg_color='grey18')
-        self.graph_frame.grid(row=1, column=0, columnspan=3, padx=5, pady=5, sticky='nsew')
+        self.graph_frame.grid(row=1, column=0, columnspan=3, padx=5, pady=(0,5), sticky='nsew')
         self.graph_frame.rowconfigure(0, weight=1)
         self.graph_frame.columnconfigure(0, weight=1)
          
@@ -217,7 +219,7 @@ class APP(ctk.CTk):
 
         fig1, ax1 = plt.subplots()
         plt.grid(color='.5')
-        plt.subplots_adjust(left=.03, right=.83, top=.95, bottom=.05)
+        plt.subplots_adjust(left=.03, right=.83, top=.95, bottom=.08)
         self.fig1 = fig1
         self.ax1 = ax1
         self.ax1.spines[['top', 'bottom', 'left', 'right']].set_color('0.18')
@@ -235,7 +237,7 @@ class APP(ctk.CTk):
 
         ############## Options Frame
         self.options_frame = ctk.CTkFrame(self, corner_radius=5, bg_color='black', fg_color='grey18')
-        self.options_frame.grid(row=0, column=0, padx=5, pady=5, sticky='nsew')
+        self.options_frame.grid(row=0, column=0, padx=5, pady=(5,0), sticky='nsew')
         self.options_frame.columnconfigure((0,1,2), weight=1)
         self.options_frame.rowconfigure((0,1,2,3,4,5,6,7), weight=1)
     
@@ -275,7 +277,7 @@ class APP(ctk.CTk):
 
         ############### Options Frame 2(right side)
         self.options2_frame = ctk.CTkFrame(self, corner_radius=5, bg_color='black', fg_color='grey18')
-        self.options2_frame.grid(row=0, column=2, padx=5, pady=5, sticky='nsew')
+        self.options2_frame.grid(row=0, column=2, padx=5, pady=(5,0), sticky='nsew')
         self.options2_frame.columnconfigure((0,1), weight=1)
 
 
@@ -304,8 +306,8 @@ class APP(ctk.CTk):
         if self.pause_button_state:             # If the state is False, this means that it is not paused
             self.pause_button_state = False
             self.pause_button.configure(text='Pause')
-            self.pipe_conn2.send('Toggle')
             self.duration_paused += (time.time() - self.paused_time)
+            self.pipe_conn2.send(self.duration_paused)
 
             if self.duration:
                 self.end_time = self.start_time + float(self.duration) + self.duration_paused
@@ -400,15 +402,18 @@ class APP(ctk.CTk):
                     button.deselect()
                     button.configure(state='disable', border_color='grey18')
                 
-                for meter in self.parameter_selections.values():
-                    for button in meter.values():       
+                for meter, params in self.parameter_selections.items():
+                    for param, button in params.items():       
                         if not button.get():
                             button.deselect()
                             button.configure(state='disabled', border_color='grey18')
                             
                         else:
-                            button.configure(state='normal', fg_color='black')  # all of the buttons that are suposed to be enabled, we make sure they are, becuase the select all function can change them
-                            button.select()
+                            if param == 'Temp_Correction':
+                                button.configure(state='disabled')
+                            else:
+                                button.configure(state='normal', fg_color='black')  # all of the buttons that are suposed to be enabled, we make sure they are, becuase the select all function can change them
+                                button.select()
 
                 ########### MultiThreading and Multiprocessing initialization
                 conn1, conn2 = mp.Pipe(duplex=True)
@@ -490,7 +495,7 @@ class APP(ctk.CTk):
             with self.lock:                 # aquire a lock before updating main data set
                 self.data_table = pd.concat([self.data_table] + data, copy=False, ignore_index=True)
                 self.graph_table = pd.concat([self.graph_table] + data, copy=False, ignore_index=True).sort_values('timestamp').tail(graph_table_length)
-            
+
             self.data_updated_flag.set()
 
             if time.time() - timer > 120:   # approximately every 120 seconds, save
@@ -579,14 +584,15 @@ class APP(ctk.CTk):
         for meter, params in self.parameter_selections.items():
             self.lines[meter] = {}
             for param, button in params.items():
-                if button.cget('state') == 'normal':
-                    if meter in active_buttons:
-                        active_buttons[meter][param] = button
-                    else:
-                        active_buttons[meter] = {param: button}
+                if param != 'Temp_Correction':
+                    if button.cget('state') == 'normal':
+                        if meter in active_buttons:
+                            active_buttons[meter][param] = button
+                        else:
+                            active_buttons[meter] = {param: button}
 
-                    line, = self.ax1.plot([],[])
-                    self.lines[meter][param] = line
+                        line, = self.ax1.plot([],[])
+                        self.lines[meter][param] = line
 
         while True:
             timer = time.time()
@@ -600,12 +606,12 @@ class APP(ctk.CTk):
     def update_graph(self, active_buttons):
         with self.lock:
             if not self.graph_table.empty:
-                x_data = None
+                x_data = np.array([])
                 y_min = None
                 y_max = None
                 for meter, params in active_buttons.items():
-                    if not x_data:              # this gets the timestamp data for 1 meter, but since its the same for all meters, there is no need to repeat it for each meter
-                        x_data = self.graph_table[self.graph_table['M_ID'] == meter]['timestamp'].tolist()
+                    if x_data.size == 0:              # this gets the timestamp data for 1 meter, but since its the same for all meters, there is no need to repeat it for each meter
+                        x_data = self.graph_table[self.graph_table['M_ID'] == meter]['timestamp'].values
                         x_min = x_data[0]
                         x_max = x_data[-1]
 
@@ -613,7 +619,7 @@ class APP(ctk.CTk):
                         line = self.lines[meter][param]
                         if button.get():
                             line.set_visible(True)
-                            y_data = self.graph_table[self.graph_table['M_ID'] == meter][self.string_map[param]].tolist()
+                            y_data = self.graph_table[self.graph_table['M_ID'] == meter][self.string_map[param]].values
                             line.set_data(x_data, y_data)
                             last_datapoint = round(y_data[-1],2)
                             line.set_label(f'{param}:{meter} \n{last_datapoint}')
@@ -632,10 +638,9 @@ class APP(ctk.CTk):
                         else:
                             line.set_visible(False)  
 
-                if y_max and y_min:
-                    self.ax1.set_xlim(x_min, x_max) 
-                    self.ax1.set_ylim((y_min * 0.95) - 1, (y_max * 1.05) + 1)
-
+                if not y_max == None and not y_min == None:
+                    self.ax1.set_xlim(x_min - 1, x_max + 1)
+                    self.ax1.set_ylim((y_min) -  .05 * np.abs(y_min) - .1 , (y_max) + .05 * np.abs(y_max) + .1)
 
                 self.ax1.legend(loc='upper left', bbox_to_anchor=(1, .5 + .025*(len(self.ax1.get_lines()))), labelcolor='linecolor') # puts the legend to the side, and ajusts the verticle based on number of lines
 
