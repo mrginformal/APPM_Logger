@@ -231,7 +231,7 @@ def pagewrite(args):
     Cmdaddress = [0x50]
     Pagenumber = [int(args[0])]
     lst = args[1].split(',')
-    data = [int(x,16) for x in lst]
+    data = [int(x) for x in lst]
     data.reverse()
 
     result = Cmdaddress + Pagenumber + data

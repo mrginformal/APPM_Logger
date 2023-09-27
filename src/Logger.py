@@ -40,7 +40,6 @@ class Meter_polling:
         self.pipe = pipe
         self.meter_initial_offcal0_values = None
         self.calibration_temp = 23      #Celcius
-        self.correction_coefficient = .47 * 33.3        # (0.47 lsb/ degree C) * (33.3 offcal0 bits / lsb)
         self.ports = [m.port for m in self.meters]
 
     def run(self):
@@ -55,6 +54,7 @@ class Meter_polling:
         enable_energy_cmd = [build_cmd('write sysconfig b00000011_00000000_00000000_00000001')]
         enable_energy_plus_tempcorrection = [build_cmd('write sysconfig b00000011_00000000_00000000_10000001')]
         get_temps_cmd = [build_cmd('read temp')]
+        pageread_2_cmd = [build_cmd('pageread 2')]
 
 
         for p in ports:
@@ -64,16 +64,33 @@ class Meter_polling:
         send_cmd(reset_energy_cmd * len(ports), ports)					
 
         reset_energy_cmd_list = []
+        temp_correction_enabled_meters = []
+
         for m in self.meters:
             if m.temp_correction:
                 reset_energy_cmd_list += enable_energy_plus_tempcorrection
+                temp_correction_enabled_meters.append(m)
             else:
                 reset_energy_cmd_list += enable_energy_cmd
 
         send_cmd(reset_energy_cmd_list, ports)
+        temp_correction_enabled_ports = [m.port for m in temp_correction_enabled_meters]
+
+        # this section read page two of the eprom on temp_correction enabled meters, and then uses the values to get a ADC drift coefficient that was writen there during calibration. 
+        # the first two bytes of page 2 are used, first byte is sign, and second byte represend the coefficient * 100. so a coefficient of -0.37 would be (1, 37)
+        
+        page_data = send_cmd(pageread_2_cmd * len(temp_correction_enabled_meters), temp_correction_enabled_ports)
+        for i, m in enumerate(temp_correction_enabled_meters):
+            data = page_data[i]['2'][0:2]
+            if not data[0]:
+                setattr(m, 'temp_coefficient', data[1] / 100)
+            elif data[0] == 1:
+                setattr(m, 'temp_coefficient', data[1] / -100)
+            else:
+                raise ValueError(f'No valid Temp Calibration for meter {m.name}')
 
         self.meter_initial_offcal0_values = send_cmd([build_cmd('read offcal0')] * len(self.meters), self.ports)
-
+        
         hex_cmds = [m.cmd for m in meters]
         while self.on:
             # a dict that contains the data for each meter(each meters name is the key), then data is the value(another dic with values for each param)
@@ -92,19 +109,17 @@ class Meter_polling:
                 data.append(measurment)
                 count += 1
                 if not count % (self.sample_count):
-                    ### perform temperature correction each sample
-                    temps = send_cmd(get_temps_cmd*len(meters), ports)
-                    update_cmds = []
-                    update_ports = []
-                    for i, m in enumerate(meters):
-                        if m.temp_correction:
-                            # note, offcal0 is a twos complement register, meaning that if the new offcal value crosses the zero point it could break with this simple implementation                    
-                            new_offcal = round(self.meter_initial_offcal0_values[i]['offcal0'] - (temps[i]['temp'] - self.calibration_temp)*self.correction_coefficient)
-                            update_cmds += [build_cmd(f'write offcal0 {new_offcal}')]
-                            update_ports += [m.port]
-
-                    send_cmd(update_cmds, update_ports)
                     break
+                
+            if not count % (self.sample_count * 20):
+                temps = send_cmd(get_temps_cmd*len(temp_correction_enabled_meters), temp_correction_enabled_ports)
+                update_cmds = []
+                for i, m in enumerate(temp_correction_enabled_meters):
+                    # note, offcal0 is a twos complement register, meaning that if the new offcal value crosses the zero point it could break with this simple implementation                    
+                    new_offcal = round(self.meter_initial_offcal0_values[i]['offcal0'] - (temps[i]['temp'] - self.calibration_temp) * m.temp_coefficient * 33.3)       # (temp_coefficient lsb/ degree C) * (33.3 offcal0 bits / lsb)
+                    update_cmds += [build_cmd(f'write offcal0 {new_offcal}')]
+
+                send_cmd(update_cmds, temp_correction_enabled_ports)
 
             formatted_data = [dict(zip(lst[0].keys(), zip(*(x.values() for x in lst))))	for lst in zip(*data)]
 
@@ -147,7 +162,7 @@ class APP(ctk.CTk):
         self.grid_rowconfigure(1, weight=3)
         self.grid_columnconfigure(0, weight=1)
         self.grid_columnconfigure(1, weight=6)
-        self.grid_columnconfigure(2, weight=3)
+        self.grid_columnconfigure(2, weight=1)
 
         self.protocol("WM_DELETE_WINDOW", self._quit)
     
@@ -275,29 +290,29 @@ class APP(ctk.CTk):
         ############### Options Frame 2(right side)
         self.options2_frame = ctk.CTkFrame(self, corner_radius=5, bg_color='black', fg_color='grey18')
         self.options2_frame.grid(row=0, column=2, padx=5, pady=(5,0), sticky='nsew')
-        self.options2_frame.columnconfigure((0,1), weight=1)
+        self.options2_frame.columnconfigure(0, weight=1)
 
 
-        self.duration_label = ctk.CTkLabel(self.options2_frame, corner_radius=5, text='Duration(s)', fg_color='grey18', text_color='yellow2', font=self.font2)
+        self.duration_label = ctk.CTkLabel(self.options2_frame, corner_radius=5, text='Duration(s)', fg_color='grey18', text_color='yellow2', font=self.font1)
         self.duration_label.grid(row=0, column=0, padx=5, pady=5, sticky='nsew')
 
         self.duration_textbox = ctk.CTkEntry(self.options2_frame, corner_radius=5, textvariable=self.test_duration_text, font=self.font2, fg_color='black', text_color='yellow2')
-        self.duration_textbox.grid(row=0, column=1, padx=5, pady=5, sticky='nsew')
+        self.duration_textbox.grid(row=1, column=0, padx=20, pady=5, sticky='nsew')
 
-        self.measurment_frequency = ctk.CTkLabel(self.options2_frame, corner_radius=5, text='Measurment Frequency(hz)', fg_color='grey18', text_color='yellow2', font=self.font2)
-        self.measurment_frequency.grid(row=1, column=0, padx=5, pady=5, sticky='nsew')
+        self.measurment_frequency = ctk.CTkLabel(self.options2_frame, corner_radius=5, text='Measurment Frequency(hz)', fg_color='grey18', text_color='yellow2', font=self.font1)
+        self.measurment_frequency.grid(row=2, column=0, padx=5, pady=5, sticky='nsew')
 
         self.measurment_frequency = ctk.CTkLabel(self.options2_frame, corner_radius=5, textvariable=str(self.measurment_freq), fg_color='grey18', text_color='yellow2', font=self.font1, anchor='center')
-        self.measurment_frequency.grid(row=1, column=1, rowspan=2, padx=5, pady=5, sticky='nsew')
+        self.measurment_frequency.grid(row=3, column=0, padx=5, pady=5, sticky='nsew')
 
         self.freq_slider = ctk.CTkSlider(self.options2_frame, variable=self.measurment_freq, from_=1, to=60, number_of_steps=60, button_color='yellow2', progress_color='yellow2', button_hover_color='grey50')
-        self.freq_slider.grid(row=2, column=0, padx=5, pady=5, sticky='nsew')
+        self.freq_slider.grid(row=4, column=0, padx=5, pady=5, sticky='nsew')
 
-        self.graph_label = ctk.CTkLabel(self.options2_frame, corner_radius=5, text='Graph Time Span', fg_color='grey18', text_color='yellow2', font=self.font2)
-        self.graph_label.grid(row=3, column=0, padx=5, pady=5, sticky='nsew')
+        self.graph_label = ctk.CTkLabel(self.options2_frame, corner_radius=5, text='Graph Time Span', fg_color='grey18', text_color='yellow2', font=self.font1)
+        self.graph_label.grid(row=5, column=0, padx=5, pady=5, sticky='nsew')
         
         self.graph_time_menu = ctk.CTkOptionMenu(self.options2_frame, corner_radius=5, values=list(self.graph_time_options.keys()), variable=self.graph_time_selection, width=200, button_color='black', button_hover_color='grey50',font=self.font2, dropdown_font=self.font2, dropdown_fg_color='black', fg_color='black', text_color='yellow2', dropdown_text_color='grey50' )
-        self.graph_time_menu.grid(row=3, column=1, padx=5, pady=5, sticky='nsew')
+        self.graph_time_menu.grid(row=6, column=0, padx=20, pady=5, sticky='nsew')
 
     def pause_logging(self):
         if self.pause_button_state:             # If the state is False, this means that it is not paused
@@ -528,7 +543,7 @@ class APP(ctk.CTk):
                     setattr(port, 'serial_number', p.serial_number)
                     comports.append(port)
 
-        self.comports = comports
+        self.comports = sorted(comports, key=lambda comport: comport.serial_number)
 
         for widget in self.selection_frame.winfo_children():              #all existing buttons need to be deleted before making the new ones, but we only want to delete the buttons
             col_num = widget.grid_info()['column']

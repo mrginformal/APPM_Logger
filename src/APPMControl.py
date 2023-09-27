@@ -200,8 +200,9 @@ def get_args(cmds, cmd, index):
 
 def main():
 
-    port1 = serial.Serial(baudrate=115200, port='COM18', timeout=0.5)
+    port1 = serial.Serial(baudrate=115200, port='COM25', timeout=0.5)
     while True:
+
         txt = input('commands: ')
         if txt == 'exit':
             break
@@ -213,13 +214,22 @@ def main():
             except ValueError as err:
                 print(f'{err}')
 
+
+        # print(send_cmd([build_cmd('read amps')], [port1]))
+        # time.sleep(.1)
+        # if not n % 10:
+        #     print('here')
+        #     send_cmd([build_cmd(f'write offcal0 31700')], [port1])
+        # n += 1
+
 def test_correction(ports):
     check_cmd = [build_cmd('read temp')]
     initials = send_cmd(check_cmd, ports)[0]
     recent_temp = initials['temp']
     correction_coefficient = .45 * 33.3   # (0.47 lsb / degree C) * (33.3 offcal bits / lsb)
     calibraton_temp = 25
-    calibration_offcal = 30600
+    calibration_offcal = 31700
+
 
     while True:
         b = input('press enter to correct value, stop to return to regular commands')
