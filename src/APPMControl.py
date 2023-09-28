@@ -206,42 +206,11 @@ def main():
         txt = input('commands: ')
         if txt == 'exit':
             break
-        if txt == 'correction':
-            test_correction([port1])
         else:
             try:
                 print(send_cmd([build_cmd(txt)], [port1]))
             except ValueError as err:
                 print(f'{err}')
-
-
-        # print(send_cmd([build_cmd('read amps')], [port1]))
-        # time.sleep(.1)
-        # if not n % 10:
-        #     print('here')
-        #     send_cmd([build_cmd(f'write offcal0 31700')], [port1])
-        # n += 1
-
-def test_correction(ports):
-    check_cmd = [build_cmd('read temp')]
-    initials = send_cmd(check_cmd, ports)[0]
-    recent_temp = initials['temp']
-    correction_coefficient = .45 * 33.3   # (0.47 lsb / degree C) * (33.3 offcal bits / lsb)
-    calibraton_temp = 25
-    calibration_offcal = 31700
-
-
-    while True:
-        b = input('press enter to correct value, stop to return to regular commands')
-        if b == 'stop':
-            return
-        a = send_cmd(check_cmd, ports)[0]
-        current_temp = a['temp']
-        print(current_temp)
-        if (recent_temp - 1) < current_temp < (recent_temp + 1):
-            recent_temp = current_temp
-            new_offcal = round(calibration_offcal - (current_temp - calibraton_temp)*correction_coefficient)
-            send_cmd([build_cmd(f'write offcal0 {new_offcal}')], ports)
 
 if __name__ == '__main__' :
     main()

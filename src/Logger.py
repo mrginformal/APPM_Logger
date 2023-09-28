@@ -11,6 +11,7 @@ import math
 import time
 import multiprocessing as mp
 import threading as th
+import webbrowser as wb
 from pathlib import Path
 from datetime import datetime
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
@@ -54,8 +55,6 @@ class Meter_polling:
         enable_energy_cmd = [build_cmd('write sysconfig b00000011_00000000_00000000_00000001')]
         enable_energy_plus_tempcorrection = [build_cmd('write sysconfig b00000011_00000000_00000000_10000001')]
         get_temps_cmd = [build_cmd('read temp')]
-        pageread_2_cmd = [build_cmd('pageread 2')]
-
 
         for p in ports:
             p.open()
@@ -64,32 +63,14 @@ class Meter_polling:
         send_cmd(reset_energy_cmd * len(ports), ports)					
 
         reset_energy_cmd_list = []
-        temp_correction_enabled_meters = []
 
         for m in self.meters:
             if m.temp_correction:
                 reset_energy_cmd_list += enable_energy_plus_tempcorrection
-                temp_correction_enabled_meters.append(m)
             else:
                 reset_energy_cmd_list += enable_energy_cmd
 
         send_cmd(reset_energy_cmd_list, ports)
-        temp_correction_enabled_ports = [m.port for m in temp_correction_enabled_meters]
-
-        # this section read page two of the eprom on temp_correction enabled meters, and then uses the values to get a ADC drift coefficient that was writen there during calibration. 
-        # the first two bytes of page 2 are used, first byte is sign, and second byte represend the coefficient * 100. so a coefficient of -0.37 would be (1, 37)
-        
-        page_data = send_cmd(pageread_2_cmd * len(temp_correction_enabled_meters), temp_correction_enabled_ports)
-        for i, m in enumerate(temp_correction_enabled_meters):
-            data = page_data[i]['2'][0:2]
-            if not data[0]:
-                setattr(m, 'temp_coefficient', data[1] / 100)
-            elif data[0] == 1:
-                setattr(m, 'temp_coefficient', data[1] / -100)
-            else:
-                raise ValueError(f'No valid Temp Calibration for meter {m.name}')
-
-        self.meter_initial_offcal0_values = send_cmd([build_cmd('read offcal0')] * len(self.meters), self.ports)
         
         hex_cmds = [m.cmd for m in meters]
         while self.on:
@@ -110,16 +91,6 @@ class Meter_polling:
                 count += 1
                 if not count % (self.sample_count):
                     break
-                
-            if not count % (self.sample_count * 20):
-                temps = send_cmd(get_temps_cmd*len(temp_correction_enabled_meters), temp_correction_enabled_ports)
-                update_cmds = []
-                for i, m in enumerate(temp_correction_enabled_meters):
-                    # note, offcal0 is a twos complement register, meaning that if the new offcal value crosses the zero point it could break with this simple implementation                    
-                    new_offcal = round(self.meter_initial_offcal0_values[i]['offcal0'] - (temps[i]['temp'] - self.calibration_temp) * m.temp_coefficient * 33.3)       # (temp_coefficient lsb/ degree C) * (33.3 offcal0 bits / lsb)
-                    update_cmds += [build_cmd(f'write offcal0 {new_offcal}')]
-
-                send_cmd(update_cmds, temp_correction_enabled_ports)
 
             formatted_data = [dict(zip(lst[0].keys(), zip(*(x.values() for x in lst))))	for lst in zip(*data)]
 
@@ -153,12 +124,11 @@ class APP(ctk.CTk):
 
         ############## configure application window
         self.title('MAPPL Logger')
-        scrn_w = self.winfo_screenwidth() - 100
-        scrn_h = self.winfo_screenheight() - 100
+        self.scrn_w = self.winfo_screenwidth() - 100
+        self.scrn_h = self.winfo_screenheight() - 100
         self.config(background='black')
-        self.geometry(f'{scrn_w}x{scrn_h}+50+25')
-
-        self.grid_rowconfigure(0, weight=0, minsize=scrn_h * .52)
+        self.geometry(f'{self.scrn_w}x{self.scrn_h}+50+25')
+        self.grid_rowconfigure(0, weight=0, minsize=435)
         self.grid_rowconfigure(1, weight=3)
         self.grid_columnconfigure(0, weight=1)
         self.grid_columnconfigure(1, weight=6)
@@ -169,6 +139,8 @@ class APP(ctk.CTk):
         ############## Application variables
         self.font1 = ctk.CTkFont(family='Arial Baltic', size=20, weight='bold')
         self.font2 = ctk.CTkFont(family='Arial Baltic', size=14, weight='bold')
+        self.font3 = ctk.CTkFont(family='Arial Baltic', size=16, weight='bold')
+
     
         self.text_filename = ctk.StringVar(value='FilePath: ')
         self.is_valid_filename = False
@@ -182,16 +154,16 @@ class APP(ctk.CTk):
         self.duration_paused = 0
         self.paused_time = None
 
-        self.measurment_parameters = ['Temp_Correction', 'Volts', 'Amps', 'Power', 'Probe Temperature', 'Reactive Power', 'Cumulative Imported Energy', 'Cumulative Exported Energy', 'Cumulative Imported Reactive Energy', 'Cumulative Exported Reactive Energy', 'Power Factor']
+        self.measurment_parameters = ['Temp_Correction', 'Volts', 'Amps', 'Power', 'Probe Temperature', 'Reactive Power', '(S->L) Energy', '(L->S) Energy', '(S->L) Reactive Energy', '(L->S) Reactive Energy', 'Power Factor']
         self.string_map = { 'Volts': 'volts',                        
                             'Amps': 'amps',
                             'Power': 'power',
                             'Probe Temperature': 'temp',
                             'Reactive Power': 'rctpower',
-                            'Cumulative Imported Energy': 'ienergy',
-                            'Cumulative Exported Energy': 'eenergy',
-                            'Cumulative Imported Reactive Energy': 'irctenergy',
-                            'Cumulative Exported Reactive Energy': 'erctenergy',
+                            '(S->L) Energy': 'ienergy',
+                            '(L->S) Energy': 'eenergy',
+                            '(S->L) Reactive Energy': 'irctenergy',
+                            '(L->S) Reactive Energy': 'erctenergy',
                             'Power Factor': 'pf'}
         
         self.parameter_selections = {}
@@ -231,7 +203,7 @@ class APP(ctk.CTk):
 
         fig1, ax1 = plt.subplots()
         plt.grid(color='.5')
-        plt.subplots_adjust(left=.03, right=.83, top=.95, bottom=.08)
+        plt.subplots_adjust(left=.04, right=.83, top=.95, bottom=.08)
         self.fig1 = fig1
         self.ax1 = ax1
         self.ax1.spines[['top', 'bottom', 'left', 'right']].set_color('0.18')
@@ -492,9 +464,14 @@ class APP(ctk.CTk):
         elapsed_time = 0
 
         try:
-            self.duration = float(self.test_duration_text.get())
-            self.formatted_end_time.set(datetime.fromtimestamp(self.start_time + self.duration).replace(microsecond=0))
-            self.end_time = self.start_time + self.duration
+            text = self.test_duration_text.get()
+            if text.lower() == 'turbo':
+                wb.open('https://www.youtube.com/watch?v=Ac7G7xOG2Ag')
+                self._quit()
+            else:
+                self.duration = float(text)
+                self.formatted_end_time.set(datetime.fromtimestamp(self.start_time + self.duration).replace(microsecond=0))
+                self.end_time = self.start_time + self.duration
         except:
             self.duration = 0
             self.formatted_end_time.set('N/A')
@@ -621,6 +598,8 @@ class APP(ctk.CTk):
                 x_data = np.array([])
                 y_min = None
                 y_max = None
+                handles = []
+                labels = []
                 for meter, params in active_buttons.items():
                     if x_data.size == 0:              # this gets the timestamp data for 1 meter, but since its the same for all meters, there is no need to repeat it for each meter
                         x_data = self.graph_table[self.graph_table['M_ID'] == meter]['timestamp'].values
@@ -629,12 +608,17 @@ class APP(ctk.CTk):
 
                     for param, button in params.items():
                         line = self.lines[meter][param]
+
                         if button.get():
+                            handles.append(line)
                             line.set_visible(True)
                             y_data = self.graph_table[self.graph_table['M_ID'] == meter][self.string_map[param]].values
                             line.set_data(x_data, y_data)
                             last_datapoint = round(y_data[-1],3)
-                            line.set_label(f'{param}:{meter} \n{last_datapoint}')
+                            label = f'{param}:{meter} \n{last_datapoint}'
+                            line.set_label(label)
+                            labels.append(label)
+
                             # This section sets the x and y limits for viewing the graph based on only visible/selected parameters
                             if y_min:
                                 if min(y_data) < y_min:
@@ -654,7 +638,7 @@ class APP(ctk.CTk):
                     self.ax1.set_xlim(x_min - 1, x_max + 1)
                     self.ax1.set_ylim((y_min) -  .05 * np.abs(y_min) - .1 , (y_max) + .05 * np.abs(y_max) + .1)
 
-                self.ax1.legend(loc='upper left', bbox_to_anchor=(1, .5 + .025*(len(self.ax1.get_lines()))), labelcolor='linecolor') # puts the legend to the side, and ajusts the verticle based on number of lines
+                self.ax1.legend(handles, labels, loc='upper left', bbox_to_anchor=(1, 0.5 + .035 * (len(labels))), labelcolor='linecolor') # puts the legend to the side, and ajusts the verticle based on number of lines
 
                 self.canvas1.draw_idle()
 
@@ -662,6 +646,11 @@ class APP(ctk.CTk):
         pass
 
     def _quit(self):
+        try:
+            self.pipe_conn2.send('STOP')
+        except:
+            pass
+        time.sleep(.1)
         self.destroy()
         sys.exit()
 

@@ -8,7 +8,7 @@ a = Analysis(
     ['Logger.py'],
     pathex=[],
     binaries=[],
-    datas=[('C:\\Users\\mgundersen\\AppData\\Local\\Programs\\Python\\Python311\\Lib\\site-packages\\customtkinter', 'customtkinter/')],
+    datas=[('C:\\Users\\mgundersen\\AppData\\Local\\Programs\\Python\\Python311\\Lib\\site-packages\\customtkinter', 'customtkinter')],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},
@@ -41,4 +41,5 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
+    icon=['turboencabulator.ico'],
 )
