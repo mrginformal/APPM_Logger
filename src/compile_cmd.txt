@@ -1,0 +1,1 @@
+pyinstaller --onefile --add-data "C:\Users\mgundersen\AppData\Local\Programs\Python\Python311\Lib\site-packages\customtkinter;customtkinter" --icon=turboencabulator.ico Logger.py

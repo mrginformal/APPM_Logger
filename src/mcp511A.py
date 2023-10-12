@@ -70,6 +70,7 @@ McpRegisters = {
     'amps'          : ('0x000e', False, 4, ampsrmsinterpreter),
     'power'         : ('0x0012', False, 4, powerinterpreter),
     'rctpower'      : ('0x0016', False, 4, powerinterpreter),
+    'apppower'      : ('0x001a', False, 4, powerinterpreter),
     'ienergy'       : ('0x001e', False, 8, accactenergyinterpreter),
     'eenergy'       : ('0x0026', False, 8, accactenergyinterpreter),
     'irctenergy'    : ('0x002e', False, 8, accactenergyinterpreter),

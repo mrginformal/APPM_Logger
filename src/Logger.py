@@ -60,7 +60,8 @@ class Meter_polling:
             p.open()
 
         # resets and enables energy accumulation for all meters, and enable temp correction if selected
-        send_cmd(reset_energy_cmd * len(ports), ports)					
+        send_cmd(reset_energy_cmd * len(ports), ports)
+        time.sleep(.1)					
 
         reset_energy_cmd_list = []
 
