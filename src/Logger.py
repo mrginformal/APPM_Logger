@@ -124,7 +124,7 @@ class APP(ctk.CTk):
         super().__init__()
 
         ############## configure application window
-        self.title('MAPPL Logger')
+        self.title('MAPPL Logger - V1.1.1')
         self.scrn_w = self.winfo_screenwidth() - 100
         self.scrn_h = self.winfo_screenheight() - 100
         self.config(background='black')
