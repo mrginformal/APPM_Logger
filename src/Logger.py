@@ -272,8 +272,8 @@ class APP(ctk.CTk):
         self.duration_textbox = ctk.CTkEntry(self.options2_frame, corner_radius=5, textvariable=self.test_duration_text, font=self.font2, fg_color='black', text_color='yellow2')
         self.duration_textbox.grid(row=1, column=0, padx=20, pady=5, sticky='nsew')
 
-        self.measurment_frequency = ctk.CTkLabel(self.options2_frame, corner_radius=5, text='Measurment Frequency(hz)', fg_color='grey18', text_color='yellow2', font=self.font1)
-        self.measurment_frequency.grid(row=2, column=0, padx=5, pady=5, sticky='nsew')
+        self.measurment_frequency_lbl = ctk.CTkLabel(self.options2_frame, corner_radius=5, text='Measurment Frequency(hz)', fg_color='grey18', text_color='yellow2', font=self.font1)
+        self.measurment_frequency_lbl.grid(row=2, column=0, padx=5, pady=5, sticky='nsew')
 
         self.measurment_frequency = ctk.CTkLabel(self.options2_frame, corner_radius=5, textvariable=str(self.measurment_freq), fg_color='grey18', text_color='yellow2', font=self.font1, anchor='center')
         self.measurment_frequency.grid(row=3, column=0, padx=5, pady=5, sticky='nsew')
@@ -382,7 +382,7 @@ class APP(ctk.CTk):
                 self.normalize_button.configure(state='normal', fg_color='yellow2')
                 self.save_as_button.configure(state='disabled', fg_color='grey50')
 
-                # clear parameter seletions so they can be used for data visualization selection, and disable all selections
+                # clear parameter seletions so they can be used for data visualization selection, and disable 'all' selection buttons
                 for button in self.all_checkboxes:
                     button.deselect()
                     button.configure(state='disable', border_color='grey18')
@@ -585,7 +585,6 @@ class APP(ctk.CTk):
                         self.lines[meter][param] = line
 
         while True:
-            timer = time.time()
             if self.stop_flag.is_set():
                 break
             
@@ -632,12 +631,18 @@ class APP(ctk.CTk):
                                     y_max = max(y_data)
                             else: 
                                 y_max = max(y_data)
+                            
+                            # used to add margin to the view so that two graphs which are on the edges to not overlap with the axis, not nessisary for max
+                            scaling_factor = (y_max - y_min) / 25
+                            y_min -= scaling_factor
+                            y_max += scaling_factor
+
                         else:
                             line.set_visible(False)  
 
                 if not y_max == None and not y_min == None:
                     self.ax1.set_xlim(x_min - 1, x_max + 1)
-                    self.ax1.set_ylim((y_min) -  .05 * np.abs(y_min) - .1 , (y_max) + .05 * np.abs(y_max) + .1)
+                    self.ax1.set_ylim((y_min), (y_max))
 
                 self.ax1.legend(handles, labels, loc='upper left', bbox_to_anchor=(1, 0.5 + .035 * (len(labels))), labelcolor='linecolor') # puts the legend to the side, and ajusts the verticle based on number of lines
 
@@ -657,6 +662,6 @@ class APP(ctk.CTk):
 
         
 if __name__ == '__main__':
-    mp.freeze_support()
+    mp.freeze_support()     # This helps the terminal close properly when exiting the GUI
     app = APP()
     app.mainloop()

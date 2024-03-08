@@ -43,8 +43,8 @@ terminal, by right clicking on it and using "Open With Python", through an IDE o
  With Temp Correction
 
  V: (0-400V) +- 0.02V
- A: (0-60A) +- 0.1% + 0.003 A
- P: (0-24000W) +- 0.15% + .2W
+ A: (0-60A) +- 0.1% + 0.005 A
+ P: (0-24000W) +- 0.15% + .3W
 Temp: N/A
 
 Without Temp Correction
