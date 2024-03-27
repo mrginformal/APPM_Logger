@@ -83,9 +83,11 @@ class Meter_polling:
                     pass
 
                 measurment = send_cmd(hex_cmds, ports)
-                timestamp = time.time() - start
+                e_time = time.time()
+
                 for i, m in enumerate(measurment):
-                    m['timestamp'] = timestamp
+                    m['timestamp'] = e_time - start
+                    m['E_time'] = e_time
                     m['M_ID'] = meters[i].name
 
                 data.append(measurment)
@@ -124,7 +126,7 @@ class APP(ctk.CTk):
         super().__init__()
 
         ############## configure application window
-        self.title('MAPPL Logger - V1.1.1')
+        self.title('MAPPL Logger - V1.1.2')
         self.scrn_w = self.winfo_screenwidth() - 100
         self.scrn_h = self.winfo_screenheight() - 100
         self.config(background='black')
@@ -335,7 +337,7 @@ class APP(ctk.CTk):
 
     def save(self, header=True, mode='a'):
         if self.data_table is not None:
-            self.data_table.sort_values('timestamp').to_csv(self.filename, mode=mode, header=header)
+            self.data_table.sort_values('timestamp').to_csv(self.filename, mode=mode, header=header, )
             print('saving')
         self.data_table = None                  # when ever a save to csv is done, it clears that data to ensure the memory doesn't fill up, this is an append based system
 
@@ -632,7 +634,7 @@ class APP(ctk.CTk):
                             else: 
                                 y_max = max(y_data)
                             
-                            # used to add margin to the view so that two graphs which are on the edges to not overlap with the axis, not nessisary for max
+                            # used to add margin to the view so that two graphs which are on the edges to not overlap with the axis
                             scaling_factor = (y_max - y_min) / 25
                             y_min -= scaling_factor
                             y_max += scaling_factor

@@ -200,7 +200,7 @@ def get_args(cmds, cmd, index):
 
 def main():
 
-    port1 = serial.Serial(baudrate=115200, port='COM18', timeout=1)
+    port1 = serial.Serial(baudrate=9600, port='COM19', timeout=1)
     while True:
 
         txt = input('commands: ')
