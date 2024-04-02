@@ -86,8 +86,8 @@ class Meter_polling:
                 e_time = time.time()
 
                 for i, m in enumerate(measurment):
-                    m['timestamp'] = e_time - start
-                    m['E_time'] = e_time
+                    m['Time'] = e_time - start
+                    m['Epoch_Time'] = e_time
                     m['M_ID'] = meters[i].name
 
                 data.append(measurment)
@@ -337,7 +337,7 @@ class APP(ctk.CTk):
 
     def save(self, header=True, mode='a'):
         if self.data_table is not None:
-            self.data_table.sort_values('timestamp').to_csv(self.filename, mode=mode, header=header, )
+            self.data_table.sort_values('Time').to_csv(self.filename, mode=mode, header=header, )
             print('saving')
         self.data_table = None                  # when ever a save to csv is done, it clears that data to ensure the memory doesn't fill up, this is an append based system
 
@@ -486,7 +486,7 @@ class APP(ctk.CTk):
             data = [pd.DataFrame(m) for m in pipe.recv()]
             with self.lock:                 # aquire a lock before updating main data set
                 self.data_table = pd.concat([self.data_table] + data, copy=False, ignore_index=True)
-                self.graph_table = pd.concat([self.graph_table] + data, copy=False, ignore_index=True).sort_values('timestamp').tail(graph_table_length)
+                self.graph_table = pd.concat([self.graph_table] + data, copy=False, ignore_index=True).sort_values('Time').tail(graph_table_length)
 
             self.data_updated_flag.set()
 
@@ -604,7 +604,7 @@ class APP(ctk.CTk):
                 labels = []
                 for meter, params in active_buttons.items():
                     if x_data.size == 0:              # this gets the timestamp data for 1 meter, but since its the same for all meters, there is no need to repeat it for each meter
-                        x_data = self.graph_table[self.graph_table['M_ID'] == meter]['timestamp'].values
+                        x_data = self.graph_table[self.graph_table['M_ID'] == meter]['Time'].values
                         x_min = x_data[0]
                         x_max = x_data[-1]
 
